@@ -191,7 +191,7 @@ func (c *Coordinator) schedule() {
 }
 func (c *Coordinator) initMapPhase() {
 	c.phase = MapPhase
-	// len(c.files) 就是 NMap
+	// len(c.files) 就是 NMap，
 	c.tasks = make([]Task, len(c.files))
 	for i, file := range c.files {
 		c.tasks[i] = Task{

@@ -61,7 +61,7 @@ func doMap(mapf func(string, string) []KeyValue, resp *HeartbeatResponse) {
 		wg.Add(1)
 		go func(index int, intermediate []KeyValue) {
 			defer wg.Done()
-			interFilePath := generateMapResultFileName(resp.Id, index)
+			interFilePath := generateMapResultFileName(resp.Id, index) //
 			var buf bytes.Buffer
 			enc := json.NewEncoder(&buf)
 			for _, kv := range intermediate {
@@ -96,7 +96,12 @@ func doReduce(reduceF func(string, []string) string, resp *HeartbeatResponse) {
 		}
 		file.Close()
 	}
-	// TODO:: 这里还没写完，只把intermediate file读了放进了kva里
+	results := make(map[string][]string)
+	// TODO:: modify to mergesort
+	for _, kv := range kva {
+		results[kv.Key] = append(results[kv.Key], kv.Value)
+	}
+	// TODO:: not done yet
 }
 
 // main/mrworker.go calls this function.
