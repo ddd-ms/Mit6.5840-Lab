@@ -44,7 +44,7 @@ func doMap(mapf func(string, string) []KeyValue, resp *HeartbeatResponse) {
 	}
 	content, err := io.ReadAll(file)
 	if err != nil {
-		log.Fatal("doMap: ", err)
+		log.Fatalf("doMap: cant read %v", fileName)
 	}
 	file.Close()
 	// apply mapfunc to file content and prepare to correct shape for writing.
@@ -55,6 +55,11 @@ func doMap(mapf func(string, string) []KeyValue, resp *HeartbeatResponse) {
 		index := ihash(kv.Key) % resp.NReduce
 		intermediates[index] = append(intermediates[index], kv)
 	}
+	// 打印intermediates的长度， 并打印每个元素的长度
+	// log.Printf("-----intermediates: %v\n", len(intermediates))
+	// for i := 0; i < len(intermediates); i++ {
+	// 	log.Printf("---------subs: [%v] len: %v\n", i, len(intermediates[i]))
+	// }
 	// multi-go-routine to write into file.
 	var wg sync.WaitGroup
 	for index, intermediate := range intermediates {
@@ -69,8 +74,8 @@ func doMap(mapf func(string, string) []KeyValue, resp *HeartbeatResponse) {
 				if err != nil {
 					log.Fatalf("doMap: %v", err)
 				}
-				atomicWriteFile(interFilePath, &buf)
 			}
+			atomicWriteFile(interFilePath, &buf)
 		}(index, intermediate)
 	}
 	wg.Wait()
@@ -96,12 +101,21 @@ func doReduce(reduceF func(string, []string) string, resp *HeartbeatResponse) {
 		}
 		file.Close()
 	}
+	// str->[]str
 	results := make(map[string][]string)
 	// TODO:: modify to mergesort
 	for _, kv := range kva {
 		results[kv.Key] = append(results[kv.Key], kv.Value)
 	}
-	// TODO:: not done yet
+	var buf bytes.Buffer
+	for k, v := range results {
+		output := reduceF(k, v)
+		//write to buf
+		fmt.Fprintf(&buf, "%v %v\n", k, output)
+	}
+	atomicWriteFile(generateReduceFileName(resp.Id), &buf)
+	fmt.Printf("write file %v\n", generateReduceFileName(resp.Id))
+	doReport(resp.Id, ReducePhase)
 }
 
 // main/mrworker.go calls this function.
@@ -111,7 +125,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	// Your worker implementation here.
 	for { // endless for loop
 		resp := doHeartbeat()
-		log.Printf("worker %d: %d %d %d %d %s", resp.Id, resp.JobType, resp.NMap, resp.NReduce, resp.Id, resp.FilePath)
+		log.Printf("Worker: received job %v", resp)
 		switch resp.JobType {
 		case MapJob:
 			doMap(mapf, resp)
@@ -122,7 +136,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		case CompleteJob:
 			return
 		default:
-			panic(fmt.Sprint("unknown job type %v", resp.JobType))
+			panic(fmt.Sprintf("unknown job type %v", resp))
 		}
 	}
 	// uncomment to send the Example RPC to the coordinator.
