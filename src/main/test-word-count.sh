@@ -7,6 +7,9 @@ echo "***Welcome to wc test***"
 # un-comment this to run the tests with the Go race detector.
 RACE=-race
 
+# test GOPROCS environment variable 
+export GOPROCS=2
+
 ISQUIET=$1
 maybe_quiet() {
     if [ "$ISQUIET" == "quiet" ]; then
@@ -80,7 +83,11 @@ pid=$!
 sleep 1
 
 echo "start up workers"
+start_time=$(date +%s%3N)
 # start multiple workers.
+(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
+(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
+(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
 (maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
 (maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
 (maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
@@ -89,7 +96,7 @@ echo "start up workers"
 
 # wait for the coordinator to exit.
 wait $pid
-
+end_time=$(date +%s%3N)
 # since workers are required to exit when a job is completely finished,
 # and not before, that means the job has finished.
 sort mr-out* | grep . > mr-wc-all
@@ -109,7 +116,7 @@ wait
 
 #########################################################
 if [ $failed_any -eq 0 ]; then
-    echo '***' PASSED wc TESTS
+    echo '***' PASSED wc TESTS, total time cost: $(($end_time-$start_time))ms
 else
     echo '***' FAILED wc TESTS
     exit 1
