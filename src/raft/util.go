@@ -3,6 +3,8 @@ package raft
 import (
 	"fmt"
 	"log"
+	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -75,7 +77,22 @@ const (
 func StableHeartbeatTimeout() time.Duration {
 	return time.Duration(HeartbeatTimeout) * time.Millisecond
 }
+
+type lockedRand struct {
+	mu   sync.Mutex
+	rand *rand.Rand
+}
+
+func (r *lockedRand) Intn(n int) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rand.Intn(n)
+}
+
+var globalRand = &lockedRand{
+	rand: rand.New(rand.NewSource((time.Now().UnixNano()))),
+}
+
 func RandomizedElectionTimeout() time.Duration {
-	// TODO:: NOT the finally impl, just op
-	return time.Minute
+	return time.Duration(ElectionTimeout+globalRand.Intn(ElectionTimeout)) * time.Millisecond
 }
