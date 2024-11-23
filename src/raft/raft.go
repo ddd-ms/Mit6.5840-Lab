@@ -270,7 +270,12 @@ func (rf *Raft) BroadcastHeartbeat() {
 		if idx == rf.me {
 			continue
 		}
-		rf.peers[idx].Call("Raft.AppendEntries", new(AppendEntriesRequest), new(AppendEntriesResponse))
+		req := new(AppendEntriesRequest)
+		req.Term = rf.currentTerm
+		req.LeaderId = rf.me
+		resp := new(AppendEntriesResponse)
+
+		go rf.peers[idx].Call("Raft.AppendEntries", req, resp)
 	}
 }
 
