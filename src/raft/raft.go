@@ -276,7 +276,7 @@ func (rf *Raft) BroadcastHeartbeat() {
 		if idx == rf.me {
 			continue
 		}
-		rf.peers[idx].Call("Raft.AppendEntries", nil, nil)
+		rf.peers[idx].Call("Raft.AppendEntries", new(AppendEntriesRequest), new(AppendEntriesResponse))
 	}
 }
 
@@ -296,7 +296,7 @@ func (rf *Raft) StartElection() {
 	rf.votedFor = rf.me
 	cntVoteGranted := 1
 	// end serial procedure
-	DPrintf("{Node %v} starts election with RequestVoteRequest %v", rf.me, req)
+	DPrintf("{Node %v} starts election with RequestVoteRequest %v, peers:%v", rf.me, req, len(rf.peers))
 	// send requestVotes
 	for idx := range rf.peers {
 		if idx == rf.me {
@@ -307,10 +307,29 @@ func (rf *Raft) StartElection() {
 			resp := new(RequestVoteResponse)
 			if rf.peers[pIndex].Call("Raft.RequestVote", req, resp) {
 				// rpc call procedure returns True means resp has been writen
-				DPrintf("{Node %v} received RequestVoteResponse %v", rf.me, resp)
-				// resp contains: Term, VoteGranted
-				// TODO:: fill logics depending on resp res
-
+				DPrintf("{Node %v} received RequestVoteResponse %v from {Node%v}", rf.me, resp, pIndex)
+				rf.mu.Lock()
+				defer rf.mu.Unlock()
+				if rf.currentTerm == req.Term && rf.state == StateCandidate {
+					// req.Term as constant, rf.currentTerm might INCR
+					// the INCR of rf.currentTerm indicates current node
+					if resp.VoteGranted {
+						cntVoteGranted += 1
+						if cntVoteGranted > len(rf.peers)/2 {
+							// candidate -> leader
+							DPrintf("{Node %v} becomes leader with term %v", rf.me, rf.currentTerm)
+							rf.ChangeState(StateLeader)
+							rf.BroadcastHeartbeat()
+							rf.heartbeatTimer.Reset(StableHeartbeatTimeout())
+						}
+					} else if resp.Term > rf.currentTerm {
+						// out of date
+						DPrintf("{Node %v} finds a new leader {Node %v} with term %v and steps down in term %v", rf.me, idx, resp.Term, rf.currentTerm)
+						rf.ChangeState(StateFollower)
+						rf.currentTerm = resp.Term
+						rf.votedFor = -1
+					}
+				}
 			}
 		}(idx)
 

@@ -60,11 +60,11 @@ const (
 func (state NodeState) String() string {
 	switch state {
 	case StateFollower:
-		return "Follower"
+		return "SFollower"
 	case StateCandidate:
-		return "Candidate"
+		return "SCandidate"
 	case StateLeader:
-		return "Leader"
+		return "SLeader"
 	}
 	panic(fmt.Sprintf("unexpected NodeState %d", state))
 }
