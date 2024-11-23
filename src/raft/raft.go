@@ -274,7 +274,6 @@ func (rf *Raft) BroadcastHeartbeat() {
 		req.Term = rf.currentTerm
 		req.LeaderId = rf.me
 		resp := new(AppendEntriesResponse)
-
 		go rf.peers[idx].Call("Raft.AppendEntries", req, resp)
 	}
 }
