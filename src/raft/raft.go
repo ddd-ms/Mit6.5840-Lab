@@ -30,7 +30,7 @@ import (
 
 // A Go object implementing a single Raft peer.
 type Raft struct {
-	mu        sync.RWMutex        // Lock to protect shared access to this peer's state
+	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
@@ -93,13 +93,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-
-	var term int
-	var isleader bool
-	// Your code here (3A).
-	term = rf.currentTerm
-	isleader = rf.state == StateLeader
-	return term, isleader
+	return rf.currentTerm, rf.state == StateLeader
 }
 
 // save Raft's persistent state to stable storage,
@@ -311,8 +305,8 @@ func (rf *Raft) StartElection() {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
 				if rf.currentTerm == req.Term && rf.state == StateCandidate {
-					// req.Term as constant, rf.currentTerm might INCR
-					// the INCR of rf.currentTerm indicates current node
+					// req.Term as constant, rf.currentTerm might INCR as rf obj receives requestVote call containing newer term
+					// at that time, there's no need to consider rf's requestVote calls' response, since they are outdated
 					if resp.VoteGranted {
 						cntVoteGranted += 1
 						if cntVoteGranted > len(rf.peers)/2 {
@@ -320,7 +314,7 @@ func (rf *Raft) StartElection() {
 							DPrintf("{Node %v} becomes leader with term %v", rf.me, rf.currentTerm)
 							rf.ChangeState(StateLeader)
 							rf.BroadcastHeartbeat()
-							rf.heartbeatTimer.Reset(StableHeartbeatTimeout())
+							// rf.heartbeatTimer.Reset(StableHeartbeatTimeout())
 						}
 					} else if resp.Term > rf.currentTerm {
 						// out of date
@@ -332,9 +326,7 @@ func (rf *Raft) StartElection() {
 				}
 			}
 		}(idx)
-
 	}
-	// gather votes and change state
 }
 func (rf *Raft) RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) {
 	// Your code here (3A, 3B).
@@ -352,6 +344,7 @@ func (rf *Raft) RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) 
 		return
 	}
 	if req.Term > rf.currentTerm {
+		// sender is newer
 		rf.ChangeState(StateFollower)
 		rf.currentTerm, rf.votedFor = req.Term, -1
 	}

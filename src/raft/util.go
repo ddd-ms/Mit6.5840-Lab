@@ -60,18 +60,18 @@ const (
 func (state NodeState) String() string {
 	switch state {
 	case StateFollower:
-		return "SFollower"
+		return "Follower"
 	case StateCandidate:
-		return "SCandidate"
+		return "Candidate"
 	case StateLeader:
-		return "SLeader"
+		return "Leader"
 	}
 	panic(fmt.Sprintf("unexpected NodeState %d", state))
 }
 
 const (
-	HeartbeatTimeout = 125
-	ElectionTimeout  = 1000 // TODO:: Find out where are these nums comes from ?
+	HeartbeatTimeout = 100
+	ElectionTimeout  = 200
 )
 
 func StableHeartbeatTimeout() time.Duration {
