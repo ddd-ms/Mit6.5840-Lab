@@ -185,14 +185,32 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 // if it's ever committed. the second return value is the current
 // term. the third return value is true if this server believes it is
 // the leader.
+func (rf *Raft) getLastLog() Entry {
+	return rf.logs[len(rf.logs)-1]
+}
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
-
 	// Your code here (3B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if rf.state != StateLeader {
+		return -1, -1, false
+	}
+	// append new log to Leader rf.logs
+	lastLog := rf.getLastLog()
+	newLog := Entry{
+		lastLog.Index + 1,
+		rf.currentTerm,
+		command,
+	}
+	rf.logs = append(rf.logs, newLog)
+	// update relevent states
+	// rf.matchIndex[rf.me] = newLog.Index
+	// rf.nextIndex[rf.me] = newLog.Index + 1
+	DPrintf("{Node %v} receives a new command[%v] to replicate in term %v", rf.me, newLog, rf.currentTerm)
 
-	return index, term, isLeader
+	// broadcast AppendEntries RPC call to all followers
+	// followers are stateless?
+	return 0, 0, true
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
