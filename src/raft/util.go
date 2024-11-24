@@ -72,6 +72,7 @@ func (state NodeState) String() string {
 const (
 	HeartbeatTimeout = 100
 	ElectionTimeout  = 200
+	RPCTimeout       = 20
 )
 
 func StableHeartbeatTimeout() time.Duration {

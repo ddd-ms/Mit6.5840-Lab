@@ -20,6 +20,7 @@ type AppendEntriesResponse struct {
 	Success       bool
 	ConflictIndex int
 	ConflictTerm  int
+	ok            chan struct{}
 }
 
 func (response AppendEntriesResponse) String() string {

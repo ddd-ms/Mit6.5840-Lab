@@ -39,19 +39,15 @@ type Raft struct {
 	// Your data here (3A, 3B, 3C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-	// applyCh        chan ApplyMsg
-	// applyCond      *sync.Cond
-	// replicatorCond []*sync.Cond
-	state NodeState
-
+	state       NodeState
 	currentTerm int // Term stands for election term
 	votedFor    int
 	logs        []Entry
 
-	// commitIndex int
-	// lastApplied int
-	// nextIndex   []int
-	// matchIndex  []int
+	commitIndex int
+	lastApplied int
+	nextIndex   []int
+	matchIndex  []int
 
 	electionTimer  *time.Timer
 	heartbeatTimer *time.Timer
@@ -60,33 +56,25 @@ type Raft struct {
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{
-		peers:     peers, // all known cluster nodes
-		persister: persister,
-		me:        me,
-		dead:      0,
-		// applyCh:   applyCh,
-		// replicatorCond: make([]*sync.Cond, len(peers)),
-		state:       StateFollower,
-		currentTerm: 0,
-		votedFor:    -1,
-		logs:        make([]Entry, 1),
-		// nextIndex:      make([]int, len(peers)),
-		// matchIndex:     make([]int, len(peers)),
+		peers:          peers, // all known cluster nodes
+		persister:      persister,
+		me:             me,
+		dead:           0,
+		state:          StateFollower,
+		currentTerm:    0,
+		votedFor:       -1,
+		logs:           make([]Entry, 1),
+		commitIndex:    -1,
+		lastApplied:    -1,
+		nextIndex:      make([]int, len(peers)),
+		matchIndex:     make([]int, len(peers)),
 		heartbeatTimer: time.NewTimer(StableHeartbeatTimeout()),
 		electionTimer:  time.NewTimer(RandomizedElectionTimeout()),
 	}
 
 	// Your initialization code here (3A, 3B, 3C).
-
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
-	// rf.applyCond = sync.NewCond(&rf.mu)
-	// lastLog := rf.getLastLog()
-	// TODO:: add a for loop here to replicate
-
 	// start ticker goroutine to start elections
 	go rf.ticker()
-
 	return rf
 }
 
@@ -192,7 +180,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// Your code here (3B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if rf.state != StateLeader {
+	if rf.state != StateLeader { // only Leader are allowed to spread logs
 		return -1, -1, false
 	}
 	// append new log to Leader rf.logs
@@ -209,8 +197,50 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	DPrintf("{Node %v} receives a new command[%v] to replicate in term %v", rf.me, newLog, rf.currentTerm)
 
 	// broadcast AppendEntries RPC call to all followers
-	// followers are stateless?
-	return 0, 0, true
+	req := new(AppendEntriesRequest)
+	req.Term = rf.currentTerm
+	req.LeaderId = rf.me
+	req.PrevLogIndex = lastLog.Index
+	req.PrevLogTerm = lastLog.Term
+	req.LeaderCommit = rf.commitIndex
+	req.Entries = []Entry{newLog} // TODO:: send one entry once? -> send more maybe
+	for peer := range rf.peers {
+		if peer == rf.me {
+			continue
+		}
+		// send AppendEntries call to all followers and wait for reply
+		// need a timeout mechanism, when triggered, send again until receive all nodes reply
+
+		// mutex to lock respCounter
+		var respCounterMu sync.Mutex
+		respCounter := 0
+		go func(peer int) {
+			resp := new(AppendEntriesResponse)
+			rf.peers[peer].Call("Raft.AppendEntries", req, resp)
+			rpcTimer := time.NewTimer(time.Duration(RPCTimeout) * time.Millisecond)
+			for {
+				select {
+				case <-resp.ok:
+					// received from RPC call
+					respCounterMu.Lock()
+					respCounter += 1
+					respCounterMu.Unlock()
+					rpcTimer.Stop()
+					return
+				case <-rpcTimer.C:
+					rf.peers[peer].Call("Raft.AppendEntries", req, resp)
+					rpcTimer.Reset(time.Duration(RPCTimeout) * time.Millisecond)
+				}
+			}
+		}(peer)
+		// think about situation:
+		// COMMAND 1 -> leader, leader boardcast AppendEntries RPC call
+		// received majority resp, commited COMMAND 1.
+		// Node x still respond, COMMAND 2 -> leader at that time.
+		// Leader would have to notify node X with req{COMMAND 1;COMMAND 2}
+
+	}
+	return newLog.Index, newLog.Term, true
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
